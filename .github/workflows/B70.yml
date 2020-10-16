@@ -2,13 +2,13 @@
 # Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
 #
 # This is free software, licensed under the MIT License.
-# See /LICENSE for more information. 
+# See /LICENSE for more information.
 #
 # https://github.com/P3TERX/Actions-OpenWrt
 # Description: Build OpenWrt using GitHub Actions
 #
 
-name: Build RaspBerryPi3 OpenWrt
+name: Build HiWiFi B70 OpenWrt
 
 on:
   repository_dispatch:
@@ -18,7 +18,7 @@ on:
     branches:
       - main
     paths:
-      - 'config/rpi3-lean-openwrt.config'
+      - 'config/B70.config'
   schedule:
     - cron: 0 4 * * 5
 #  watch:
@@ -28,9 +28,9 @@ env:
   REPO_URL: https://github.com/coolsnowwolf/lede
   REPO_BRANCH: master
   FEEDS_CONF: feeds.conf.default
-  CONFIG_FILE: config/rpi3-lean-openwrt.config
+  CONFIG_FILE: config/B70.config
   DIY_P1_SH: scripts/diy-part1.sh
-  DIY_P2_SH: scripts/diy-part3.sh
+  DIY_P2_SH: scripts/diy-part2.sh
   SSH_ACTIONS: false
   UPLOAD_BIN_DIR: false
   UPLOAD_FIRMWARE: true
