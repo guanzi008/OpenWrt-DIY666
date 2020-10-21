@@ -124,13 +124,6 @@ jobs:
         du -h --max-depth=1 openwrt/build_dir
         du -h --max-depth=1 openwrt/bin
 
-    - name: Upload bin directory
-      uses: actions/upload-artifact@main
-      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
-      with:
-        name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: openwrt/bin
-
     - name: 整理文件
       run: |
         mkdir -p ./artifact/firmware
