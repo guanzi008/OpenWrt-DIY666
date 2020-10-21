@@ -131,6 +131,8 @@ jobs:
         cp -rf $(find openwrt/bin/targets/ -type f -name "*.buildinfo" -o -name "*.manifest") ./artifact/buildinfo/
         cp -rf $(find openwrt/bin/targets/ -type f -name "*combined*img*") ./artifact/firmware/
         cp -rf $(find openwrt/bin/targets/ -type f -name "*combined*vmdk*") ./artifact/vmware/
+        echo "::set-env name=FIRMWARE::$PWD"
+        echo "::set-output name=status::success"
     - name: 上传固件
       uses: actions/upload-artifact@v2
       with:
