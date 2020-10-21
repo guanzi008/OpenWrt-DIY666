@@ -120,67 +120,101 @@ jobs:
         name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
 
-    - name: Organize files
-      id: organize
-      if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
+    - name: 整理文件
       run: |
-        cd openwrt/bin/targets/*/*
-        rm -rf packages
-        echo "::set-env name=FIRMWARE::$PWD"
-        echo "::set-output name=status::success"
-    - name: Upload firmware directory
-      uses: actions/upload-artifact@main
-      if: steps.organize.outputs.status == 'success' && !cancelled()
+        mkdir -p ./artifact/firmware
+        mkdir -p ./artifact/vmware
+        mkdir -p ./artifact/package
+        mkdir -p ./artifact/buildinfo
+        rm -rf $(find openwrt/bin/targets/ -type d -name "packages")
+        cp -rf $(find openwrt/bin/packages/ -type f -name "*.ipk") ./artifact/package/
+        cp -rf $(find openwrt/bin/targets/ -type f -name "*.buildinfo" -o -name "*.manifest") ./artifact/buildinfo/
+        cp -rf $(find openwrt/bin/targets/ -type f -name "*combined*img*") ./artifact/firmware/
+        cp -rf $(find openwrt/bin/targets/ -type f -name "*combined*vmdk*") ./artifact/vmware/
+    - name: 上传固件
+      uses: actions/upload-artifact@v2
       with:
-        name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
-        path: ${{ env.FIRMWARE }}
+        name: OpenWrt-firmware-Lean-${{ env.FILE_DATE }}
+        path: ./artifact/firmware/
 
-    - name: Upload firmware to cowtransfer
-      if: steps.organize.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true' && !cancelled()
+    - name: 上传vmware镜像
+      uses: actions/upload-artifact@v2
+      with:
+        name: OpenWrt-vmware-Lean-${{ env.FILE_DATE }}
+        path: ./artifact/vmware/
+
+    - name: 上传插件包
+      uses: actions/upload-artifact@v2
+      with:
+        name: OpenWrt-package-Lean-${{ env.FILE_DATE }}
+        path: ./artifact/package/
+
+    - name: 上传固件信息
+      uses: actions/upload-artifact@v2
+      with:
+        name: OpenWrt-buildinfo-Lean-${{ env.FILE_DATE }}
+        path: ./artifact/buildinfo/
+    - name: 上传固件到「奶牛快传」和「wetransfer」
+      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true' && !cancelled()
       run: |
         curl -fsSL git.io/file-transfer | sh
         ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
         echo "::warning file=cowtransfer.com::$(cat cowtransfer.log | grep https)"
-    - name: Upload firmware to WeTransfer
-      if: steps.organize.outputs.status == 'success' && env.UPLOAD_WETRANSFER == 'true' && !cancelled()
-      run: |
         curl -fsSL git.io/file-transfer | sh
         ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
-        echo "::warning file=wetransfer.com::$(cat wetransfer.log | grep https)"   # 生成标签
-    - name: Generate Tag
-      id: tag
-      if: steps.compile.outputs.status == 'success' && env.CREATE_RELEASE == 'true' && !cancelled()
-      run: |
-        echo ::set-env name=RELEASE_TAG::"$(TZ=UTC-8 date +"%Y-%m-%d")"
-        echo "::set-output name=status::success"
+        echo "::warning file=wetransfer.com::$(cat wetransfer.log | grep https)"
     
-    # 发行固件
-    - name: Upload Firmware To Release
+    - name: 提取发布用的「奶牛快传」跟「WeTransfer」的链接
+      if: steps.organizer.outputs.status == 'success' && !cancelled()
+      run: |
+        curl -fsSL git.io/file-transfer | sh
+        ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
+        echo "::set-env name=COWTRANSFER_URL::$(cat cowtransfer.log | grep https | cut -f3 -d" ")" 
+        curl -fsSL git.io/file-transfer | sh
+        ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
+        echo "::set-env name=WETRANSFER_URL::$(cat wetransfer.log | grep https | cut -f3 -d" ")"    
+    
+    - name: 自动发布固件
       uses: softprops/action-gh-release@v1
-      if: steps.tag.outputs.status == 'success' && !cancelled()
+      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_RELEASE == 'true'
       env:
-        GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.REPO_TOKEN }}
       with:
-        name: Netgear WNDR3800 🚀 | 自动编译 / ${{ env.RELEASE_TAG }}
-        tag_name: ${{ env.RELEASE_DATE }}
+        name: ${{ env.date1 }} 「 ${{ env.WXFB_MESSAGE }} 」固件
+        tag_name: ${{ env.date2 }}
         body: |            
-            1、本固件为自动编译
-            2、发行版中只提供完整的固件
-            3、需要单独IPK请到分支下载
-            4、源码：${{ env.REPO_URL }}
-            -- Build by chouniu @ with Github Action on ${{ env.RELEASE_DATE }}
-            🚀 Auto build | 自动编译
-            🔗 [Cowtransfer | 奶牛快传](${{ env.COWTRANSFER_URL }}) 
-            🔗 [WeTransfer](${{ env.WETRANSFER_URL }})       
-            当前使用版本:（编译前的最后一次大雕源码更新）            
-            ${{ env.useVersionInfo }}
-            ${{ github.event.commits[0].message }}
-        files: ${{ env.FIRMWARE }}/*   # 微信通知
-    - name: WeChat Notification
-      if: steps.compile.outputs.status == 'success' && env.SEND_WECHAT_MSG == 'true' && !cancelled()
+            ☆  源码 : ${{ env.REPO_URL }}
+            ☆  分支 : ${{ env.REPO_BRANCH }}
+            ☆  感谢源码作者无私分享！
+            
+            🎉 [ ${{matrix.target}} ]固件下载 ✨
+            
+            💐 奶牛快传(国内高速🚀下载)： ${{ env.COWTRANSFER_URL }}
+            
+            ⛄ WeTransfer(国外高速🚀下载)： ${{ env.WETRANSFER_URL }}
+            
+            🌴 链接有效期为7天，无需注册直接下载 🐤
+        files: ${{ env.FIRMWARE }}/*
+
+    - name: 微信通知
+      if: steps.organizer.outputs.status == 'success' && env.SERVERCHAN_SCKEY == 'true'
       uses: emon100/Action-Serverchan@master
       with:
         SCKEY: ${{ secrets.SCKEY }}
-        text: ${{ env.BRANCH }}固件编译完成！
-        desp:  Netgear WNDR3800 🚀 | 自动编译 /1、本固件为自动编译2、发行版中只提供完整的固件3、需要单独IPK请到分支下载4、源码：${{ env.REPO_URL }}-- Build by chouniu @ with Github Action on ${{ env.RELEASE_DATE }} 🚀 Auto build | 自动编译🔗 [Cowtransfer | 奶牛快传](${{ env.COWTRANSFER_URL }}) 🔗 [WeTransfer](${{ env.WETRANSFER_URL }})当前使用版本:（编译前的最后一次大雕源码更新）${{ env.useVersionInfo }}${{ github.event.commits[0].message }}     
-          
+        text: 恭喜主人${{matrix.target}}固件编译成功！
+        desp: 我亲爱的主人您要编译的${{ env.WXFB_MESSAGE }}固件成功完成了！
+              
+              
+              完成时间：${{ env.date1 }}
+              
+              
+              发布地址：${{ env.GITHUB_RELEASE }}
+              
+              
+              奶牛快传：${{ env.COWTRANSFER_URL }}
+              
+              
+              WeTransfer：${{ env.WETRANSFER_URL }}
+              
+              
+              祝小主人见人爱，花见花开，车见车载，天天好心情🎈！！！
