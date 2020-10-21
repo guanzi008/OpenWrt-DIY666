@@ -123,48 +123,41 @@ jobs:
         name: OpenWrt_bin${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
         path: openwrt/bin
 
-    - name: 整理固件文件夹
-      id: organizer
+    - name: 整理文件
       run: |
-        mkdir config
-        find openwrt/bin/targets/ -name "*config.buildinfo*" | xargs -i mv -f {} config        
-        cd openwrt/bin/targets/*/*
-        rm -rf packages && mkdir packages
-        find -name "*.buildinfo*" | xargs -i mv -f {} packages
-        find -name "*sha256sums*" | xargs -i mv -f {} packages
-        find -name "*kernel.bin*" | xargs -i mv -f {} packages
-        find -name "*kernel1.bin*" | xargs -i mv -f {} packages
-        find -name "*rootfs*" | xargs -i mv -f {} packages
-        find -name "*.manifest*" | xargs -i mv -f {} packages
-        find -name "*vmlinuz*" | xargs -i mv -f {} packages
-        find -name "*esxi.vmdk*" | xargs -i mv -f {} packages
-        rm -rf packages
-        echo "::set-env name=FIRMWARE::$PWD"
-        echo "::set-output name=status::success"
-        
-    - name: 上传.config配置文件在github空间    
-      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_CONFIG == 'true'
+        mkdir -p ./artifact/firmware
+        mkdir -p ./artifact/vmware
+        mkdir -p ./artifact/package
+        mkdir -p ./artifact/buildinfo
+        rm -rf $(find openwrt/bin/targets/ -type d -name "packages")
+        cp -rf $(find openwrt/bin/packages/ -type f -name "*.ipk") ./artifact/package/
+        cp -rf $(find openwrt/bin/targets/ -type f -name "*.buildinfo" -o -name "*.manifest") ./artifact/buildinfo/
+        cp -rf $(find openwrt/bin/targets/ -type f -name "*combined*img*") ./artifact/firmware/
+        cp -rf $(find openwrt/bin/targets/ -type f -name "*combined*vmdk*") ./artifact/vmware/
+    - name: 上传固件
       uses: actions/upload-artifact@v2
       with:
-        name: .config_${{matrix.target}}_${{ env.date }}
-        path: ./config
+        name: OpenWrt-firmware-Lean-${{ env.FILE_DATE }}
+        path: ./artifact/firmware/
 
-    - name: 上传固件在github空间
+    - name: 上传vmware镜像
       uses: actions/upload-artifact@v2
-      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_FIRMWARE == 'true'
       with:
-        name: OpenWrt_firmware_${{matrix.target}}_${{ env.date }}
-        path: ${{ env.FIRMWARE }}
+        name: OpenWrt-vmware-Lean-${{ env.FILE_DATE }}
+        path: ./artifact/vmware/
 
-    - name: 上传固件到「奶牛快传」和「wetransfer」
-      if: steps.organizer.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true' && !cancelled()
-      run: |
-        curl -fsSL git.io/file-transfer | sh
-        ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
-        echo "::warning file=cowtransfer.com::$(cat cowtransfer.log | grep https)"
-        curl -fsSL git.io/file-transfer | sh
-        ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
-        echo "::warning file=wetransfer.com::$(cat wetransfer.log | grep https)"
+    - name: 上传插件包
+      uses: actions/upload-artifact@v2
+      with:
+        name: OpenWrt-package-Lean-${{ env.FILE_DATE }}
+        path: ./artifact/package/
+
+    - name: 上传固件信息
+      uses: actions/upload-artifact@v2
+      with:
+        name: OpenWrt-buildinfo-Lean-${{ env.FILE_DATE }}
+        path: ./artifact/buildinfo/
+
     
     - name: 提取发布用的「奶牛快传」跟「WeTransfer」的链接
       if: steps.organizer.outputs.status == 'success' && !cancelled()
