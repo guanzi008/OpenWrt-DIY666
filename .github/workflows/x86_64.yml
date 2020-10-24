@@ -130,9 +130,8 @@ jobs:
       run: |
         cd openwrt/bin/targets/*/*
         rm -rf packages
-        echo "::set-env name=FIRMWARE::$PWD"
+        echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "::set-output name=status::success"
-        
     - name: Upload firmware directory
       uses: actions/upload-artifact@main
       if: steps.organize.outputs.status == 'success' && !cancelled()
@@ -141,15 +140,105 @@ jobs:
         path: ${{ env.FIRMWARE }}
 
     - name: Upload firmware to cowtransfer
+      id: cowtransfer
       if: steps.organize.outputs.status == 'success' && env.UPLOAD_COWTRANSFER == 'true' && !cancelled()
       run: |
         curl -fsSL git.io/file-transfer | sh
         ./transfer cow --block 2621440 -s -p 64 --no-progress ${FIRMWARE} 2>&1 | tee cowtransfer.log
         echo "::warning file=cowtransfer.com::$(cat cowtransfer.log | grep https)"
-        
+        echo "::set-output name=url::$(cat cowtransfer.log | grep https | cut -f3 -d" ")"
     - name: Upload firmware to WeTransfer
+      id: wetransfer
       if: steps.organize.outputs.status == 'success' && env.UPLOAD_WETRANSFER == 'true' && !cancelled()
       run: |
         curl -fsSL git.io/file-transfer | sh
         ./transfer wet -s -p 16 --no-progress ${FIRMWARE} 2>&1 | tee wetransfer.log
         echo "::warning file=wetransfer.com::$(cat wetransfer.log | grep https)"
+        echo "::set-output name=url::$(cat wetransfer.log | grep https | cut -f3 -d" ")"
+    - name: Generate release tag
+      id: tag
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      run: |
+        echo "::set-output name=release_tag::$(date +"%Y.%m.%d-%H%M")"
+        touch release.txt
+        [ $UPLOAD_COWTRANSFER = true ] && echo "🔗 [Cowtransfer](${{ steps.cowtransfer.outputs.url }})" >> release.txt
+        [ $UPLOAD_WETRANSFER = true ] && echo "🔗 [WeTransfer](${{ steps.wetransfer.outputs.url }})" >> release.txt
+        echo "::set-output name=status::success"
+    - name: Upload firmware to release
+      uses: softprops/action-gh-release@v1
+      if: steps.tag.outputs.status == 'success' && !cancelled()
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.tag.outputs.release_tag }}
+        body_path: release.txt
+        files: ${{ env.FIRMWARE }}/*
+
+    - name: Remove old Artifacts
+      uses: c-hive/gha-remove-artifacts@v1.2.0
+      with:
+        age: '1 day'
+        skip-recent: 3
+
+    - name: Remove old Releases
+      uses: dev-drprasad/delete-older-releases@v0.1.0
+      if: env.UPLOAD_RELEASE == 'true' && !cancelled()
+      with:
+        keep_latest: 3
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+        
+#===========其他diy上传==============================================================
+#-----------ERROR↓---------
+    #- name: Upload dl directory
+      #uses: actions/upload-artifact@master
+      #if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+      #with:
+        #name: OpenWrt_dl${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+        #path: openwrt/dl
+                
+    - name: Upload dl directory
+      uses: actions/upload-artifact@master
+      if: always()
+      with:
+        name: OpenWrt_dl
+        path: openwrt/dl
+
+    #- name: Upload packages directory
+      #uses: actions/upload-artifact@master
+      #with:
+        #name: OpenWrt_bin_packages
+        #path: openwrt/bin/packages
+
+    #- name: Upload targets directory
+      #uses: actions/upload-artifact@master
+      #with:
+        #name: OpenWrt_bin_targets
+        #path: openwrt/bin/targets
+
+#==================================================================================
+    #- name: 自定义插件
+      #run: |
+        #cd openwrt
+        #git clone  https://github.com/zxlhhyccc/bf-package.git package/openwrt-package
+#==================================================================================
+
+    #- name: 涡轮增雕进程
+      #run: |
+        #cd package
+        #mkdir openwrt-packages
+        #cd openwrt-packages
+        #git clone https://github.com/openwrt-develop/luci-theme-atmaterial.git
+
+        # LuCI主题:
+        #cat >> .config <<EOF
+        #CONFIG_PACKAGE_luci-i18n-kcptun-zh-cn=y
+        #CONFIG_PACKAGE_luci-i18n-trojan-server-zh-cn=y
+        #CONFIG_PACKAGE_luci-app-kcptun=y
+        #CONFIG_PACKAGE_luci-i18n-trojan-server-zh-cn=y
+        #EOF
+
+#==================================================================================
+
